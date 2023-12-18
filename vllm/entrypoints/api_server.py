@@ -44,10 +44,12 @@ async def generate(request: Request) -> Response:
     async def stream_results() -> AsyncGenerator[bytes, None]:
         async for request_output in results_generator:
             prompt = request_output.prompt
+            prompt_logprobs = request_output.prompt_logprobs
+            prompt_token_ids = request_output.prompt_token_ids
             text_outputs = [
                 prompt + output.text for output in request_output.outputs
             ]
-            ret = {"text": text_outputs}
+            ret = {"text": text_outputs, "prompt_logprobs": prompt_logprobs, "prompt_token_ids": prompt_token_ids}
             yield (json.dumps(ret) + "\0").encode("utf-8")
 
     if stream:
@@ -64,8 +66,16 @@ async def generate(request: Request) -> Response:
 
     assert final_output is not None
     prompt = final_output.prompt
-    text_outputs = [prompt + output.text for output in final_output.outputs]
-    ret = {"text": text_outputs}
+    prompt_logprobs = final_output.prompt_logprobs
+    prompt_token_ids = final_output.prompt_token_ids
+    generated_logprobs = [out.logprobs for out in final_output.outputs]
+    if isinstance(prompt, str):
+        text_outputs = [prompt + output.text for output in final_output.outputs]
+    elif isinstance(prompt, list):
+        text_outputs = [p + output.text for output, p in zip(final_output.outputs, prompt)]
+    else:
+        raise TypeError(f"Invalid type: {type(prompt)}")
+    ret = {"text": text_outputs, "prompt_logprobs": prompt_logprobs, "prompt_token_ids": prompt_token_ids, "generated_logprobs": generated_logprobs}
     return JSONResponse(ret)
 
 
